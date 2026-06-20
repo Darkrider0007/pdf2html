@@ -5,13 +5,24 @@ from fastapi import (
     APIRouter,
     Request,
     UploadFile,
-    File
+    File,
+    HTTPException
 )
 
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
+from fastapi.responses import JSONResponse
 
 from app.config import UPLOAD_DIR
+from app.services.pdf_service import (
+    extract_pdf
+)
+
+from app.config import (
+    UPLOAD_DIR,
+    OUTPUT_DIR
+)
+
 from app.services.pdf_service import (
     extract_pdf
 )
@@ -66,5 +77,66 @@ async def upload_pdf(
         {
             "request": request,
             "preview_url": preview_url
+        }
+    )
+
+
+@router.post("/api/pdf/convert")
+async def convert_pdf(
+    file: UploadFile = File(...)
+):
+
+    if not file.filename.lower().endswith(".pdf"):
+
+        raise HTTPException(
+            status_code=400,
+            detail="Only PDF files are allowed."
+        )
+
+    pdf_path = os.path.join(
+        UPLOAD_DIR,
+        file.filename
+    )
+
+    with open(pdf_path, "wb") as buffer:
+
+        shutil.copyfileobj(
+            file.file,
+            buffer
+        )
+
+    # Convert PDF
+    pdf_name = extract_pdf(
+        pdf_path
+    )
+
+    html_file_path = os.path.join(
+        OUTPUT_DIR,
+        pdf_name,
+        "output.html"
+    )
+
+    if not os.path.exists(
+        html_file_path
+    ):
+
+        raise HTTPException(
+            status_code=500,
+            detail="Generated HTML file not found."
+        )
+
+    with open(
+        html_file_path,
+        "r",
+        encoding="utf-8"
+    ) as html_file:
+
+        html_content = html_file.read()
+
+    return JSONResponse(
+        {
+            "success": True,
+            "pdf_name": pdf_name,
+            "html": html_content
         }
     )
